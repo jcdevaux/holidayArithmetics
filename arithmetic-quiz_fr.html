@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Entrainement au Calcul</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f6fc;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      flex-direction: column;
+    }
+    .container {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      margin-top: 40px;
+      padding: 32px 24px;
+      max-width: 410px;
+      width: 100%;
+    }
+    h1 {
+      text-align: center;
+      color: #3266cc;
+    }
+    .question {
+      font-size: 1.25rem;
+      margin: 18px 0;
+    }
+    .answers input[type="number"] {
+      width: 70px;
+      padding: 6px;
+      margin-right: 10px;
+      font-size: 1.1em;
+    }
+    button {
+      padding: 10px 20px;
+      background: #3266cc;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    .result {
+      margin-top: 18px;
+      font-weight: bold;
+      font-size: 1.15em;
+    }
+    .summary {
+      margin-top: 25px;
+      background: #f0f8ff;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 1.1em;
+      color: #245090;
+    }
+    .restart {
+      margin-top: 18px;
+      background: #fff;
+      color: #3266cc;
+      border: 1px solid #3266cc;
+    }
+    .timer {
+      text-align: right;
+      font-size: 1.1em;
+      color: #444;
+      margin-bottom: 8px;
+      min-height: 1.4em;
+    }
+    .op-select {
+      margin-bottom: 14px;
+      font-size: 1.08em;
+    }
+    .op-select label {
+      margin-right: 12px;
+      margin-left: 6px;
+      font-weight: normal;
+    }
+    #quiz-section {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Entrainement au Calcul</h1>
+    <div id="setup-section">
+      <form id="setup-form">
+        <div class="op-select">
+          <span>Choix des opérations :</span><br>
+          <label><input type="checkbox" name="op" value="+" checked> +</label>
+          <label><input type="checkbox" name="op" value="-" checked> −</label>
+          <label><input type="checkbox" name="op" value="×" checked> ×</label>
+          <label><input type="checkbox" name="op" value="÷" checked> ÷</label>
+        </div>
+        <button type="submit" id="start-btn">Démarrer (Prépare-toi le chrono commence quand tu cliques)</button>
+      </form>
+    </div>
+    <div id="quiz-section">
+      <div class="timer" id="timer"></div>
+      <form id="quiz-form"></form>
+      <button id="submit-btn">Vérifier les réponses</button>
+      <div id="result" class="result"></div>
+    </div>
+    <div id="summary-section" class="summary" style="display:none;">
+      <div id="summary"></div>
+      <button class="restart" id="restart-btn">Réessayer</button>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const NUM_QUESTIONS = 12;
+      let timerInterval = null;
+      let startTime = null;
+      let elapsed = 0;
+      let selectedOps = ['+', '-', '×', '÷'];
+      let questions = [];
+
+      function generateQuestion(ops) {
+        const op = ops[Math.floor(Math.random() * ops.length)];
+        let a, b, question, answer;
+
+        switch (op) {
+          case '+':
+            a = Math.floor(Math.random() * 91) + 10;
+            b = Math.floor(Math.random() * 91) + 10;
+            question = `${a} + ${b}`;
+            answer = a + b;
+            break;
+          case '-':
+            a = Math.floor(Math.random() * 91) + 10;
+            b = Math.floor(Math.random() * (a - 10 + 1)) + 10;
+            question = `${a} - ${b}`;
+            answer = a - b;
+            break;
+          case '×':
+            a = Math.floor(Math.random() * 11) + 2;
+            b = Math.floor(Math.random() * 11) + 2;
+            question = `${a} × ${b}`;
+            answer = a * b;
+            break;
+          case '÷':
+            b = Math.floor(Math.random() * 11) + 2;
+            answer = Math.floor(Math.random() * 11) + 2;
+            a = b * answer;
+            question = `${a} ÷ ${b}`;
+            break;
+        }
+        return { question, answer };
+      }
+
+      function generateQuestions(n, ops) {
+        const qs = [];
+        for (let i = 0; i < n; i++) qs.push(generateQuestion(ops));
+        return qs;
+      }
+
+      function renderQuiz(questions) {
+        const form = document.getElementById('quiz-form');
+        form.innerHTML = '';
+        questions.forEach((q, idx) => {
+          const qDiv = document.createElement('div');
+          qDiv.className = 'question';
+          qDiv.innerHTML = `
+            <label>Q${idx + 1}: \t\t ${q.question} = 
+              <input type="number" step="1" required name="answer${idx}" autocomplete="off">
+            </label>
+          `;
+          form.appendChild(qDiv);
+        });
+        document.getElementById('result').textContent = '';
+      }
+
+      function handleSubmit(questions) {
+        stopTimer();
+        const form = document.getElementById('quiz-form');
+        const resultDiv = document.getElementById('result');
+        let correct = 0;
+        let feedback = [];
+        for (let i = 0; i < questions.length; i++) {
+          const userInput = form[`answer${i}`].value;
+          const userAns = userInput === '' ? null : Number(userInput);
+          const correctAns = questions[i].answer;
+          if (userAns === correctAns) {
+            correct++;
+            feedback.push(`<span style="color:green;">Q${i+1} ✓</span><br/>`);
+          } else {
+            feedback.push(
+              `<span style="color:red;">Q${i+1} ✗ (Bonne réponse : ${correctAns})</span><br/>`
+            );
+          }
+        }
+        //resultDiv.innerHTML = `Tu as <strong>${correct}/${questions.length}</strong> réponses correctes.<br>${feedback.join(' ')}`;
+        resultDiv.innerHTML = `<br>${feedback.join(' ')}`;
+        setTimeout(() => showSummary(questions, correct), 1200);
+      }
+
+      function showSummary(questions, correctCount) {
+        //document.getElementById('quiz-section').style.display = 'none';
+        document.getElementById('summary-section').style.display = 'block';
+        let msg = '';
+        if (correctCount === questions.length) {
+          msg = "🎉 Parfait! Toutes les réponses sont bonnes !";
+        } else if (correctCount > questions.length * 0.7) {
+          msg = "👍 Pas mal ! Continue à t'entrainer pour avoir tout bon !";
+        } else {
+          msg = "😊 Continue tes efforts. Recommence !";
+        }
+        document.getElementById('summary').innerHTML = `
+          <div>${msg}</div>
+          <div>Tu as <strong>${correctCount}/${questions.length}</strong> correct.</div>
+          <div>Chrono : <b>${formatTime(elapsed)}</b></div>
+        `;
+      }
+
+      function restartQuiz() {
+        document.getElementById('summary-section').style.display = 'none';
+        document.getElementById('setup-section').style.display = 'block';
+        document.getElementById('quiz-section').style.display = 'none';
+        document.getElementById('timer').textContent = '';
+      }
+
+      function setupQuiz() {
+        questions = generateQuestions(NUM_QUESTIONS, selectedOps);
+        renderQuiz(questions);
+        document.getElementById('quiz-section').style.display = 'block';
+        document.getElementById('result').textContent = '';
+        document.getElementById('submit-btn').disabled = false;
+        startTimer();
+        document.getElementById('quiz-form').scrollIntoView({ behavior: "smooth" });
+      }
+
+      // --- Timer logic ---
+      function startTimer() {
+        startTime = Date.now();
+        elapsed = 0;
+        updateTimer();
+        timerInterval = setInterval(() => {
+          elapsed = Math.floor((Date.now() - startTime) / 1000);
+          updateTimer();
+        }, 1000);
+      }
+      function stopTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        elapsed = Math.floor((Date.now() - startTime) / 1000);
+        updateTimer();
+      }
+      function updateTimer() {
+        document.getElementById('timer').textContent = `⏱ Chrono : ${formatTime(elapsed)}`;
+      }
+      function formatTime(sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m}:${s.toString().padStart(2,'0')}`;
+      }
+
+      document.getElementById('setup-form').onsubmit = function(e) {
+        e.preventDefault();
+        // Gather selected operations
+        const ops = Array.from(document.querySelectorAll('input[name="op"]:checked')).map(el => el.value);
+        if (ops.length === 0) {
+          alert('Choisir au moins un type d opération ou plus.');
+          return;
+        }
+        selectedOps = ops;
+        document.getElementById('setup-section').style.display = 'none';
+        document.getElementById('quiz-section').style.display = 'block'; // <-- ensure questions are shown!
+        setupQuiz();
+      };
+
+      document.getElementById('submit-btn').onclick = function(e) {
+        e.preventDefault();
+        // Check all fields filled
+        const inputs = document.querySelectorAll('#quiz-form input[type="number"]');
+        for (const inp of inputs) {
+          if (inp.value === "") {
+            inp.focus();
+            alert("Réponds à tout avant de valider.");
+            return;
+          }
+        }
+        document.getElementById('submit-btn').disabled = true;
+        handleSubmit(questions);
+      };
+
+      document.getElementById('restart-btn').onclick = restartQuiz;
+    });
+  </script>
+</body>
+</html>
